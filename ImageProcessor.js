@@ -148,6 +148,7 @@ class ImageProcessor {
             const cachedImage = fs.readFileSync(cachePath);
             res.setHeader('Content-Type', 'image/webp');
             res.setHeader('Cache-Control', 'public, max-age=31557600'); // Cache for one year
+            res.setHeader('Link', '<https://ik.imagekit.io/pu0hxo64d/images/favicon.ico>; rel="icon"')
             return res.end(cachedImage);
         }
 
