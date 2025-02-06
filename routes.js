@@ -35,7 +35,12 @@ router.get('/image_kit/:width_height/:image_name/:quality?', async (req, res) =>
 
     try {
         const imageProcessor = new ImageProcessor();
-        await imageProcessor.processImage(`${width_height},q-${quality || 100}`, image_name, res);
+        const qualityParam = quality ? `,q-${quality}` : ''; // Add quality if provided
+        await imageProcessor.processImage(`${width_height}${qualityParam}`, image_name, res);
+
+        // Set favicon link in the response
+        res.setHeader('Link', '<https://ik.imagekit.io/pu0hxo64d/images/favicon.ico>; rel="icon"');
+
     } catch (error) {
         console.error('Error processing image:', error);
         res.status(500).send('Internal Server Error');
