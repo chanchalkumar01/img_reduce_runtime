@@ -119,14 +119,15 @@ class ImageProcessor {
         try {
             const imageUrl = `https://cdn.sloshout.com/uploads/gallery/${image_name}`;
             const matches = width_height.match(/w-(\d+|f),h-(\d+|f)(?:,q-(\d+))?/);
-
+    
             if (!matches) {
-                return res.status(400).json({ error: 'Invalid parameters. Use format: w-200,h-300,q-80 or w-f,h-f for full size' });
+                if (!res.headersSent) res.status(400).json({ error: 'Invalid parameters' });
+                return;
             }
-
+    
             let [, width, height, quality] = matches;
             quality = quality ? parseInt(quality, 10) : 100;
-
+    
             if (width === 'f' || height === 'f') {
                 const dimensions = await this.getImageDimensions(imageUrl);
                 width = width === 'f' ? dimensions.width : parseInt(width, 10);
@@ -135,66 +136,73 @@ class ImageProcessor {
                 width = parseInt(width, 10);
                 height = parseInt(height, 10);
             }
-
+    
             if (isNaN(width) || isNaN(height) || isNaN(quality)) {
-                return res.status(400).json({ error: 'Invalid width, height, or quality values' });
+                if (!res.headersSent) res.status(400).json({ error: 'Invalid width, height, or quality values' });
+                return;
             }
-
+    
             const cachePath = this.getCachePath(`${width_height}_q${quality}`, image_name);
-
-            // ✅ Delete cached image if `forceUpdate = true`
+    
+            // ✅ Delete cache if `forceUpdate = true`
             if (forceUpdate && fs.existsSync(cachePath)) {
                 fs.unlinkSync(cachePath);
             }
-
+    
             // ✅ Serve cached image if available
             if (fs.existsSync(cachePath)) {
-                res.setHeader('Content-Type', 'image/webp');
-                res.setHeader('Cache-Control', 'public, max-age=31557600');
-                res.setHeader('Link', '<https://ik.imagekit.io/pu0hxo64d/images/favicon.ico>; rel="icon"');
-
+                if (!res.headersSent) {
+                    res.setHeader('Content-Type', 'image/webp');
+                    res.setHeader('Cache-Control', 'public, max-age=31557600');
+                    res.setHeader('Link', '<https://ik.imagekit.io/pu0hxo64d/images/favicon.ico>; rel="icon"');
+                }
                 return fs.createReadStream(cachePath).pipe(res);
             }
-
+    
             // Download the image
             const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
             const imageData = Buffer.from(response.data, 'binary');
-
+    
             // Resize and process the image
             const resizedImageBuffer = await sharp(imageData)
                 .resize(width, height)
                 .toBuffer();
-
+    
             // Create SVG text overlay
             const svgText = `
                 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
                     <text x="50%" y="50%" font-family="Arial" font-size="20" fill="rgba(255, 255, 255, 0.5)" text-anchor="middle">${this.text}</text>
                 </svg>`;
-
+    
             // Composite text on the image
             const finalImageBuffer = await sharp(resizedImageBuffer)
-                .composite([{ input: Buffer.from(svgText), gravity: 'center' }]) // Changed gravity to 'center'
+                .composite([{ input: Buffer.from(svgText), gravity: 'northwest' }])
                 .webp({ quality })
                 .toBuffer();
-
+    
             // Save processed image to cache
             fs.mkdirSync(path.dirname(cachePath), { recursive: true });
             fs.writeFileSync(cachePath, finalImageBuffer);
-
+    
             // ✅ Set headers BEFORE sending response
-            res.setHeader('Content-Type', 'image/webp');
-            res.setHeader('Cache-Control', 'public, max-age=31557600');
-            res.setHeader('Link', '<https://ik.imagekit.io/pu0hxo64d/images/favicon.ico>; rel="icon"');
-
+            if (!res.headersSent) {
+                res.setHeader('Content-Type', 'image/webp');
+                res.setHeader('Cache-Control', 'public, max-age=31557600');
+                res.setHeader('Link', '<https://ik.imagekit.io/pu0hxo64d/images/favicon.ico>; rel="icon"');
+            }
+    
             res.end(finalImageBuffer);
-
+    
         } catch (error) {
             console.error('Error processing image:', error);
+            
+            // ✅ Prevent sending error response twice
             if (!res.headersSent) {
                 res.status(500).json({ error: 'Internal Server Error' });
             }
         }
     }
+
 }
 
 module.exports = ImageProcessor;
