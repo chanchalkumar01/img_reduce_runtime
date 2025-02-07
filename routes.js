@@ -30,22 +30,27 @@ router.get('/example', (req, res) => {
 // });
 
 
-router.get('/image_kit/:width_height/:image_name/:quality?', async (req, res) => {
-    const { width_height, image_name, quality } = req.params;
+router.get('/image_kit/:width_height/:image_name/:quality?/:refresh?', async (req, res) => {
+    const { width_height, image_name, quality, refresh } = req.params;
 
     try {
         const imageProcessor = new ImageProcessor();
-        const qualityParam = quality ? `,q-${quality}` : ''; // Add quality if provided
-        await imageProcessor.processImage(`${width_height}${qualityParam}`, image_name, res);
+        const qualityParam = quality ? `,q-${quality}` : '';
+        const forceUpdate = refresh === "true"; 
 
-        // Set favicon link in the response
-        res.setHeader('Link', '<https://ik.imagekit.io/pu0hxo64d/images/favicon.ico>; rel="icon"');
+        // ✅ Ensure no headers are modified after response is sent
+        await imageProcessor.processImage(`${width_height}${qualityParam}`, image_name, res, forceUpdate);
 
     } catch (error) {
         console.error('Error processing image:', error);
-        res.status(500).send('Internal Server Error');
+        
+        // ✅ Prevent double responses
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
     }
 });
+
 
 
 // Export the router
